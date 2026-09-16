@@ -158,24 +158,18 @@ type Payload interface {
 // NonceSize is the length of a TSP nonce (128 bits).
 const NonceSize = 16
 
-// SCS is an upper-layer application payload (XSCS). Its content is a generic
-// CESR stream (-A##).
+// SCS is an upper-layer application payload (XSCS).
 type SCS struct {
-	// Data is the application bytes, carried as a single CESR Bytes primitive
-	// inside the stream. On Open it is non-nil exactly when the stream consists
-	// of one Bytes primitive.
+	// Data is the application bytes, carried as exactly one CESR Bytes
+	// primitive inside the -A## stream. Its format is the upper layer's; Open
+	// rejects a stream holding anything else (spec issue #77).
 	Data []byte
-	// Stream is the raw content of the -A## stream. On Pack, a non-nil Stream is
-	// carried verbatim instead of wrapping Data (it must be triplet-aligned);
-	// on Open it is always set.
-	Stream []byte
 }
 
 // CTL is a generic control payload (XCTL) for the layer above TSP. It has the
 // same shape as SCS.
 type CTL struct {
-	Data   []byte
-	Stream []byte
+	Data []byte
 }
 
 // PAD is a padding message (XPAD). Pad the message with PackOptions.Padding.

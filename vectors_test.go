@@ -324,10 +324,10 @@ func payloadEqual(a, b Payload) bool {
 	switch a := a.(type) {
 	case *SCS:
 		b, ok := b.(*SCS)
-		return ok && bytes.Equal(a.Data, b.Data) && bytes.Equal(a.Stream, b.Stream)
+		return ok && bytes.Equal(a.Data, b.Data)
 	case *CTL:
 		b, ok := b.(*CTL)
-		return ok && bytes.Equal(a.Data, b.Data) && bytes.Equal(a.Stream, b.Stream)
+		return ok && bytes.Equal(a.Data, b.Data)
 	case *PAD:
 		b, ok := b.(*PAD)
 		return ok && bytes.Equal(a.Nonce, b.Nonce)

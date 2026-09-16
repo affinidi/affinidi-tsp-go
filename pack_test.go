@@ -540,3 +540,32 @@ func TestIdentityValidation(t *testing.T) {
 	_, err := Pack(alice, bob.Public(), &SCS{}, &PackOptions{Scheme: SchemeHPKEPQ})
 	expectKind(t, err, KindInvalidInput)
 }
+
+// An XSCS body is exactly one Bytes primitive (spec issue #77): an -H##
+// interleaved group, or a second primitive, is refused rather than truncated.
+func TestStreamIsOneBytesPrimitive(t *testing.T) {
+	prim := func(b []byte) []byte { p, _ := cesr.AppendVarData(nil, cesr.CodeB, b); return p }
+	frameOf := func(stream []byte) []byte {
+		tag := cesr.Tag("XSCS")
+		body := append([]byte{}, tag[:]...)
+		body = append(body, prim(nil)...) // NULL sender
+		body = append(body, prim(nil)...) // no padding
+		body, _ = cesr.AppendCount(body, cesr.CodeA, len(stream)/3)
+		body = append(body, stream...)
+		f, _ := cesr.AppendCount(nil, cesr.CodeZ, len(body)/3)
+		return append(f, body...)
+	}
+	if _, err := decodePayload(frameOf(prim([]byte("hello world"))), nil); err != nil {
+		t.Fatalf("single Bytes primitive refused: %v", err)
+	}
+	json := prim([]byte(`{"hello":"world"}`))
+	hgroup, _ := cesr.AppendCount(nil, byte(cesr.Int("H")), len(json)/3)
+	for name, stream := range map[string][]byte{
+		"-H group":       append(hgroup, json...),
+		"two primitives": append(prim([]byte("one")), prim([]byte("two"))...),
+	} {
+		if _, err := decodePayload(frameOf(stream), nil); !errors.Is(err, ErrMalformed) {
+			t.Errorf("%s: got %v, want malformed", name, err)
+		}
+	}
+}

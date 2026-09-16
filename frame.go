@@ -102,22 +102,18 @@ func appendSignatureAttachment(dst []byte, sig []byte) ([]byte, error) {
 	return append(dst, prim...), nil
 }
 
-// appendStream appends a -A## generic stream holding either the raw stream or a
-// single Bytes primitive of data.
-func appendStream(dst []byte, data, stream []byte) ([]byte, error) {
-	if stream == nil {
-		var err error
-		if stream, err = cesr.AppendVarData(nil, cesr.CodeB, data); err != nil {
-			return dst, wrapErr(KindInvalidInput, err, "encoding payload data")
-		}
-	} else if len(stream)%3 != 0 {
-		return dst, newErr(KindInvalidInput, "raw payload stream is not triplet-aligned")
+// appendStream appends a -A## generic stream holding data as a single Bytes
+// primitive.
+func appendStream(dst, data []byte) ([]byte, error) {
+	prim, err := cesr.AppendVarData(nil, cesr.CodeB, data)
+	if err != nil {
+		return dst, wrapErr(KindInvalidInput, err, "encoding payload data")
 	}
-	out, err := cesr.AppendCount(dst, cesr.CodeA, len(stream)/3)
+	out, err := cesr.AppendCount(dst, cesr.CodeA, len(prim)/3)
 	if err != nil {
 		return dst, wrapErr(KindInvalidInput, err, "encoding payload stream")
 	}
-	return append(out, stream...), nil
+	return append(out, prim...), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -154,11 +150,11 @@ func encodePayload(p Payload, in *frameInput) (frame []byte, said *Digest, err e
 
 	switch p := p.(type) {
 	case *SCS:
-		if post, err = appendStream(nil, p.Data, p.Stream); err != nil {
+		if post, err = appendStream(nil, p.Data); err != nil {
 			return nil, nil, err
 		}
 	case *CTL:
-		if post, err = appendStream(nil, p.Data, p.Stream); err != nil {
+		if post, err = appendStream(nil, p.Data); err != nil {
 			return nil, nil, err
 		}
 	case *PAD:
@@ -415,26 +411,25 @@ func (c *cursor) nonce(what string) ([]byte, error) {
 }
 
 // stream reads a -A## generic stream that must end exactly at the end of b.
-func (c *cursor) stream() (data, stream []byte, err error) {
+func (c *cursor) stream() ([]byte, error) {
 	q, err := c.count(cesr.CodeA, "payload stream")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if q*3 != len(c.b)-c.pos {
-		return nil, nil, newErr(KindMalformed, "payload stream count does not match the payload frame")
+		return nil, newErr(KindMalformed, "payload stream count does not match the payload frame")
 	}
-	stream = append([]byte(nil), c.rest()...)
+	// The stream is exactly one Bytes primitive and nothing else: the form the
+	// specification's vectors and the ToIP reference use (spec issue #77).
+	d, n, err := cesr.ReadVarData(c.rest(), cesr.CodeB)
+	if err != nil {
+		return nil, cesrErr(err, "payload data")
+	}
+	if n != len(c.rest()) {
+		return nil, newErr(KindMalformed, "payload stream holds more than one Bytes primitive")
+	}
 	c.pos = len(c.b)
-	// TSP carries the stream opaquely, but a stream that opens with a Bytes
-	// primitive must encode it canonically (non-zero lead bytes are rejected).
-	d, n, err := cesr.ReadVarData(stream, cesr.CodeB)
-	switch {
-	case errors.Is(err, cesr.ErrNonCanonical):
-		return nil, nil, cesrErr(err, "payload data")
-	case err == nil && n == len(stream):
-		data = append([]byte{}, d...)
-	}
-	return data, stream, nil
+	return append([]byte{}, d...), nil
 }
 
 // decodePayload parses a plaintext payload frame. envFields is the message's
@@ -487,14 +482,14 @@ func decodePayload(frame, envFields []byte) (*decodedPayload, error) {
 		if err := readPadding(); err != nil {
 			return nil, err
 		}
-		data, stream, err := c.stream()
+		data, err := c.stream()
 		if err != nil {
 			return nil, err
 		}
 		if typ == PayloadSCS {
-			out.payload = &SCS{Data: data, Stream: stream}
+			out.payload = &SCS{Data: data}
 		} else {
-			out.payload = &CTL{Data: data, Stream: stream}
+			out.payload = &CTL{Data: data}
 		}
 	case PayloadPAD:
 		nonce, err := c.nonce("nonce")
