@@ -9,6 +9,11 @@ go get github.com/affinidi/affinidi-tsp-go
 
 Requires Go 1.27 (`crypto/mldsa`, `crypto/hpke`).
 
+> **Status: pre-release (0.1.0), not independently security-audited.** Checked
+> against the specification's Appendix A vectors and, for interoperability, against
+> the ToIP reference and other implementations by
+> [tsp-conformance](https://github.com/OpenVTC/tsp-conformance).
+
 ## What it implements
 
 | Area | Coverage |
