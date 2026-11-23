@@ -1,7 +1,11 @@
 # affinidi-tsp-go
 
-A Go implementation of the **Trust Spanning Protocol (TSP), Rev 3** — wire
-version `YTSP-AAC` (0.2) — from the Trust over IP Foundation.
+A Go implementation of the **Trust Spanning Protocol (TSP) 1.0** — wire
+version `YTSP-BAA` — from the Trust over IP Foundation
+([tswg-tsp-specification@ccda6b3](https://github.com/trustoverip/tswg-tsp-specification/commit/ccda6b33159d860f05c328eb436dabe83548b705)).
+It interoperates with `affinidi-tsp` 0.3+, `@openvtc/vti-tsp-js` 0.4+ and the
+ToIP reference `tsp_sdk` 0.16+. Messages from the Rev 3 (`YTSP-AAC`) and Rev 2
+drafts are refused; upgrade both ends together.
 
 ```
 go get github.com/affinidi/affinidi-tsp-go
@@ -9,7 +13,7 @@ go get github.com/affinidi/affinidi-tsp-go
 
 Requires Go 1.27 (`crypto/mldsa`, `crypto/hpke`).
 
-> **Status: pre-release (0.1.0), not independently security-audited.** Checked
+> **Status: pre-release (0.2.0), not independently security-audited.** Checked
 > against the specification's Appendix A vectors and, for interoperability, against
 > the ToIP reference and other implementations by
 > [tsp-conformance](https://github.com/OpenVTC/tsp-conformance).
@@ -19,13 +23,14 @@ Requires Go 1.27 (`crypto/mldsa`, `crypto/hpke`).
 | Area | Coverage |
 |---|---|
 | Framing | Binary-domain CESR: short and long count codes (`-X##` / `--X#####`), variable-length data with lead-byte variants (`4B`/`5B`/`6B`, `7AAB`/`8AAB`/`9AAB`), long VIDs, fixed data, indexed Ed25519 (`B#`) and ML-DSA-65 (`1AAQ`) signatures |
-| Payloads | `XSCS`, `XCTL`, `XPAD`, `XRFI` (Reply_Path, Referral_Field), `XRFA`, `XRFD`, `XHOP` (nested and routed); Padding_Field; ESSR `VID_sndr` as the NULL VID `4BAA` or present |
+| Payloads | `XSCS`, `XCTL`, `XPAD`, `XRFI` (Reply_Path, Referral_Field), `XRFA`, `XRFD`, `XHOP` (nested and routed); Padding_Field; ESSR `VID_sndr`: always the sender's VID in a confidential payload (TSP 1.0 §3.7 step 7; a NULL VID there is refused), and optionally the NULL VID `4BAA` in a signed-only one |
 | Digests | Self-addressing TSP digests: SHA2-256 (`I`) and Blake2b-256 (`F`), computed on pack and verified on open |
 | Schemes | HPKE-Base (DHKEM(X25519, HKDF-SHA256) / HKDF-SHA256 / ChaCha20Poly1305); HPKE-Base with `MLKEM768-X25519` + ML-DSA-65; libsodium sealed box; signed-only |
 | Relationships | `Endpoint`: invite / accept / cancel / send / receive, RFI race tie-break by lower digest, application messages refused without a relationship |
 
-All ten Appendix A vectors open; the nine that publish their ephemeral key
-material are reproduced **byte for byte** by `Pack` (see `vectors_test.go`).
+All eleven TSP 1.0 Appendix A vectors open, including the referral invite
+(`Signature_new` verified); the ten that publish their ephemeral key material
+are reproduced **byte for byte** by `Pack` (see `vectors_test.go`).
 The post-quantum vector publishes none — the hybrid KEM draws its own
 randomness — so it is opened and round-tripped instead.
 

@@ -13,10 +13,27 @@ type Version struct {
 	Major, Minor int
 }
 
-// CurrentVersion is the version this package emits: 0.2, encoded YTSP-AAC.
-var CurrentVersion = Version{Major: 0, Minor: 2}
+// CurrentVersion is the version this package emits and the only MAJOR it
+// reads: TSP 1.0, encoded YTSP-BAA. Rev 3 (0.2, YTSP-AAC) and Rev 2 (0.1) are
+// refused.
+var CurrentVersion = Version{Major: 1, Minor: 0}
 
 func (v Version) String() string { return fmt.Sprintf("%d.%d", v.Major, v.Minor) }
+
+// describeVersion names the drafts a refused version belongs to.
+func describeVersion(major, minor int) string {
+	switch {
+	case major == 1:
+		return "TSP 1.0"
+	case major == 0 && minor == 2:
+		return "the Rev 3 draft, YTSP-AAC"
+	case major == 0 && minor == 64:
+		return "the Rev 3 pre-merge draft, YTSP-ABA"
+	case major == 0 && minor == 1:
+		return "the Rev 2 draft, YTSP-AAB"
+	}
+	return "unknown"
+}
 
 // Scheme is how a message's payload is protected.
 type Scheme uint8

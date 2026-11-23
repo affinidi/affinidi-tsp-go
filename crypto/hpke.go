@@ -1,4 +1,4 @@
-// Package crypto holds the cryptographic primitives TSP Rev 3 composes:
+// Package crypto holds the cryptographic primitives TSP 1.0 composes:
 // HPKE-Base over DHKEM(X25519, HKDF-SHA256) with ChaCha20Poly1305, the same
 // suite over the MLKEM768-X25519 hybrid KEM, the libsodium anonymous sealed
 // box, Ed25519 and ML-DSA-65 signatures, and the SHA2-256 / Blake2b-256

@@ -8,12 +8,14 @@ import (
 	"testing"
 )
 
-// The Appendix A vectors of TSP Rev 3 (YTSP-AAC), as extracted into
-// testdata/spec-vectors.json. Values are qb64; base64url-decoding gives the
-// binary-domain wire bytes.
+// The Appendix A vectors of TSP 1.0 (YTSP-BAA), as published in the released
+// specification (tswg-tsp-specification ccda6b3) and in testdata/spec-vectors.json,
+// identical to affinidi-tsp's and vti-tsp-js's. Values are qb64;
+// base64url-decoding gives the binary-domain wire bytes.
 
 type vectorIdentity struct {
 	ID         string `json:"id"`
+	LongForm   string `json:"longForm"`
 	SigKeyType string `json:"sigKeyType"`
 	PkS        string `json:"pkS"`
 	SkS        string `json:"skS"`
@@ -31,6 +33,8 @@ type vector struct {
 	Message      string `json:"message"`
 	Payload      string `json:"payload"`
 	InnerPayload string `json:"innerPayload"`
+	NewVid       string `json:"newVid"`
+	SignatureNew string `json:"signatureNew"`
 }
 
 type vectorFile struct {
@@ -95,8 +99,8 @@ func (vf *vectorFile) identity(t testing.TB, name string) *PrivateIdentity {
 
 func TestSpecVectors(t *testing.T) {
 	vf := loadVectors(t)
-	if len(vf.Vectors) != 10 {
-		t.Fatalf("expected 10 vectors, got %d", len(vf.Vectors))
+	if len(vf.Vectors) != 11 {
+		t.Fatalf("expected 11 vectors, got %d", len(vf.Vectors))
 	}
 	for name, v := range vf.Vectors {
 		t.Run(name, func(t *testing.T) {
@@ -200,9 +204,9 @@ func checkVectorPayload(t *testing.T, vf *vectorFile, name string, m *Message) {
 	case "direct-sealed-box":
 		expectSCS(t, m, "hello world", SchemeSealedBox, m.Sender)
 	case "direct-hpke-base":
-		expectSCS(t, m, "hello world", SchemeHPKEBase, "")
+		expectSCS(t, m, "hello world", SchemeHPKEBase, m.Sender)
 	case "direct-hpke-base-pq":
-		expectSCS(t, m, "hello world", SchemeHPKEPQ, "")
+		expectSCS(t, m, "hello world", SchemeHPKEPQ, m.Sender)
 	case "direct-signed-only":
 		expectSCS(t, m, "public announcement!", SchemeSignedOnly, "")
 	case "control-rfi-direct", "control-rfi-sealed-box":
@@ -222,6 +226,41 @@ func checkVectorPayload(t *testing.T, vf *vectorFile, name string, m *Message) {
 		}
 		if rfi.Digest.Alg != wantAlg {
 			t.Fatalf("digest algorithm %v, want %v", rfi.Digest.Alg, wantAlg)
+		}
+	case "control-rfi-referral":
+		// §7.2.5: an invite over an existing relationship that introduces a new
+		// VID, with Signature_new by that VID's key.
+		rfi, ok := m.Payload.(*RFI)
+		if !ok {
+			t.Fatalf("payload %T", m.Payload)
+		}
+		v := vf.Vectors[name]
+		introduced := vf.identity(t, v.NewVid)
+		// The referral names the introduced did:peer:4 in its long form.
+		if lf := vf.Identifiers[v.NewVid].LongForm; lf != "" {
+			introduced.VID = lf
+		}
+		if rfi.Referral == nil || rfi.Referral.VID != introduced.VID {
+			t.Fatalf("referral %+v, want VID %s", rfi.Referral, introduced.VID)
+		}
+		if !bytes.Equal(rfi.Referral.Signature, b64(t, v.SignatureNew)) {
+			t.Fatalf("Signature_new differs from the vector")
+		}
+		if m.PayloadSender != m.Sender {
+			t.Fatalf("a TSP 1.0 confidential payload must carry the ESSR sender")
+		}
+		if err := VerifyReferral(m, introduced.Public()); err != nil {
+			t.Fatalf("VerifyReferral: %v", err)
+		}
+		tampered := *m
+		tamperedRFI := *rfi
+		tamperedRef := *rfi.Referral
+		tamperedRef.Signature = append([]byte(nil), rfi.Referral.Signature...)
+		tamperedRef.Signature[0] ^= 1
+		tamperedRFI.Referral = &tamperedRef
+		tampered.Payload = &tamperedRFI
+		if err := VerifyReferral(&tampered, introduced.Public()); err == nil {
+			t.Fatalf("VerifyReferral accepted a tampered Signature_new")
 		}
 	case "control-rfa-direct", "control-rfd":
 		rfiMsg := openVector(t, vf, "control-rfi-direct")
@@ -262,7 +301,7 @@ func checkVectorPayload(t *testing.T, vf *vectorFile, name string, m *Message) {
 		if err != nil {
 			t.Fatalf("opening inner message: %v", err)
 		}
-		expectSCS(t, inner, "hello world", SchemeHPKEBase, "")
+		expectSCS(t, inner, "hello world", SchemeHPKEBase, inner.Sender)
 	default:
 		t.Fatalf("no expectations for vector %s", name)
 	}

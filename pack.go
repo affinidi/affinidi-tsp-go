@@ -14,11 +14,11 @@ type SenderField uint8
 
 // ESSR sender field choices.
 const (
-	// SenderFieldDefault is the scheme's default: the sender's VID under the
-	// sealed box (which requires it), the NULL VID otherwise.
+	// SenderFieldDefault carries the sender's VID. TSP 1.0 requires it in
+	// every confidential payload (§3.2, §3.7 step 7), under every scheme.
 	SenderFieldDefault SenderField = iota
-	// SenderFieldNull carries the NULL VID 4BAA. Not permitted under the sealed
-	// box.
+	// SenderFieldNull carries the NULL VID 4BAA. 1.0 permits it only in a
+	// non-confidential (signed-only) payload; Pack refuses it otherwise.
 	SenderFieldNull
 	// SenderFieldPresent carries the envelope sender's VID.
 	SenderFieldPresent
@@ -124,12 +124,10 @@ func Pack(sender *PrivateIdentity, receiver *Identity, payload Payload, opts *Pa
 	var senderFieldVID string
 	switch opts.PayloadSender {
 	case SenderFieldDefault:
-		if scheme == SchemeSealedBox {
-			senderFieldVID = sender.VID
-		}
+		senderFieldVID = sender.VID
 	case SenderFieldNull:
-		if scheme == SchemeSealedBox {
-			return nil, newErr(KindInvalidInput, "the sealed box requires the ESSR sender VID in the payload")
+		if scheme != SchemeSignedOnly {
+			return nil, newErr(KindInvalidInput, "a confidential payload must carry the ESSR sender VID (TSP 1.0 §3.7)")
 		}
 	case SenderFieldPresent:
 		senderFieldVID = sender.VID
