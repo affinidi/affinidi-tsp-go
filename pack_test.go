@@ -84,7 +84,8 @@ func TestRoundTripAllSchemesAndPayloads(t *testing.T) {
 							expectKind(t, err, KindInvalidInput)
 							return
 						}
-						if sf == SenderFieldNull && c.scheme == SchemeSealedBox {
+						if sf == SenderFieldNull && c.scheme != SchemeSignedOnly {
+							// TSP 1.0: a confidential payload must name its sender.
 							expectKind(t, err, KindInvalidInput)
 							return
 						}
@@ -109,9 +110,9 @@ func TestRoundTripAllSchemesAndPayloads(t *testing.T) {
 						if m.Scheme != wantScheme || m.Sender != c.sender.VID || m.Receiver != c.receiver.VID {
 							t.Fatalf("envelope: %+v", m)
 						}
-						wantSender := ""
-						if sf == SenderFieldPresent || (sf == SenderFieldDefault && c.scheme == SchemeSealedBox) {
-							wantSender = c.sender.VID
+						wantSender := c.sender.VID
+						if sf == SenderFieldNull {
+							wantSender = ""
 						}
 						if m.PayloadSender != wantSender {
 							t.Fatalf("payload sender %q, want %q", m.PayloadSender, wantSender)
@@ -333,10 +334,11 @@ func TestOpenRejections(t *testing.T) {
 		}
 	})
 	t.Run("unknown major version", func(t *testing.T) {
+		// Rev 3 (YTSP-AAC) is refused: the version field follows the 3-byte -E
+		// code, and is 6 bytes including the YTSP tag.
 		m := append([]byte(nil), msg...)
-		// YTSP-AAC -> YTSP-BAC: the version code follows the 3-byte -E code and
-		// the 3-byte YTSP tag.
-		m[7] |= 0x10
+		rev3, _ := cesr.AppendVersion(nil, 0, 2)
+		copy(m[3:3+len(rev3)], rev3)
 		_, err := Peek(m)
 		expectKind(t, err, KindVersion)
 		_, err = Open(bob, alice.Public(), m)
@@ -352,7 +354,7 @@ func TestOpenRejections(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Version != (Version{0, 64}) {
+		if got.Version != (Version{1, 64}) {
 			t.Fatalf("version %v", got.Version)
 		}
 	})
@@ -382,7 +384,7 @@ func resign(t *testing.T, signer *PrivateIdentity, msg []byte, edit func([]byte)
 // frame, so tests can exercise payload checks behind a valid signature.
 func buildSignedOnly(t *testing.T, sender *PrivateIdentity, receiverVID string, frame []byte) []byte {
 	t.Helper()
-	env, _ := cesr.AppendVersion(nil, 0, 2)
+	env, _ := cesr.AppendVersion(nil, CurrentVersion.Major, CurrentVersion.Minor)
 	env, _ = appendVID(env, sender.VID)
 	env, _ = appendVID(env, receiverVID)
 	msg, _ := cesr.AppendCount(nil, cesr.CodeE, (len(env)+len(frame))/3)
@@ -399,7 +401,7 @@ func buildSignedOnly(t *testing.T, sender *PrivateIdentity, receiverVID string, 
 }
 
 func envFieldsFor(sender, receiver string) []byte {
-	env, _ := cesr.AppendVersion(nil, 0, 2)
+	env, _ := cesr.AppendVersion(nil, CurrentVersion.Major, CurrentVersion.Minor)
 	env, _ = appendVID(env, sender)
 	env, _ = appendVID(env, receiver)
 	return env
@@ -476,6 +478,42 @@ func TestPayloadChecksBehindAValidSignature(t *testing.T) {
 		msg, _ = appendSignatureAttachment(msg, sig)
 		_, err = Open(bob, alice.Public(), msg)
 		expectKind(t, err, KindSender)
+	})
+
+	// TSP 1.0 (§3.2, §3.7 step 7): HPKE-Base no longer lets a confidential
+	// payload carry the NULL VID, which Rev 3 allowed.
+	t.Run("HPKE-Base requires ESSR sender", func(t *testing.T) {
+		sf, _ := appendVID(nil, "")
+		env := envFieldsFor(alice.VID, bob.VID)
+		frame, _, err := encodePayload(&SCS{Data: []byte("x")}, &frameInput{envFields: env, senderField: sf, digestAlg: DigestSHA2256, nonce: nonceGen})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ct, err := tspcrypto.HPKEBaseSeal(bob.EncryptionKey, hpkeInfo, env, frame, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := cesr.AppendVarData(nil, cesr.CodeF, ct)
+		msg, _ := cesr.AppendCount(nil, cesr.CodeE, (len(env)+len(body))/3)
+		msg = append(append(msg, env...), body...)
+		sig, _ := sign(alice, msg, nil)
+		msg, _ = appendSignatureAttachment(msg, sig)
+		_, err = Open(bob, alice.Public(), msg)
+		expectKind(t, err, KindSender)
+	})
+
+	t.Run("signed-only NULL ESSR sender allowed", func(t *testing.T) {
+		packed, err := Pack(alice, bob.Public(), &SCS{Data: []byte("x")}, &PackOptions{Scheme: SchemeSignedOnly, PayloadSender: SenderFieldNull})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := Open(bob, alice.Public(), packed.Message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.PayloadSender != "" {
+			t.Fatalf("payload sender %q, want the NULL VID", m.PayloadSender)
+		}
 	})
 
 	t.Run("signed-only hop refused", func(t *testing.T) {

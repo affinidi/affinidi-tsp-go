@@ -135,8 +135,10 @@ func Open(receiver *PrivateIdentity, sender *Identity, msg []byte) (*Message, er
 		if subtle.ConstantTimeCompare([]byte(dp.payloadSender), []byte(pm.sender)) != 1 {
 			return nil, newErr(KindSender, "ESSR sender VID does not match the envelope sender")
 		}
-	} else if scheme == SchemeSealedBox {
-		return nil, newErr(KindSender, "a sealed-box payload must carry the ESSR sender VID")
+	} else if scheme != SchemeSignedOnly {
+		// TSP 1.0 requires the sender's VID in every confidential payload
+		// (§3.2, §3.7 step 7). Rev 3 let HPKE-Base write the NULL VID.
+		return nil, newErr(KindSender, "ESSR sender VID is the NULL VID; a confidential payload must name its sender")
 	}
 	if _, ok := dp.payload.(*HOP); ok && scheme == SchemeSignedOnly {
 		return nil, newErr(KindMalformed, "a nested or routed message must be confidential")

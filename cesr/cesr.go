@@ -2,7 +2,7 @@
 // Trust Spanning Protocol uses to frame its messages.
 //
 // TSP never interprets CESR in general: it uses a small, closed set of codes
-// from the master code table for genus -_AAACAA (TSP Rev 3, "Serialization
+// from the master code table for genus -_AAACAA (TSP 1.0, "Serialization
 // and Encoding"). This package implements exactly those, in the binary
 // domain, with canonical-encoding checks on every read:
 //
@@ -63,7 +63,7 @@ const (
 )
 
 // CodeMLDSA65 is the 18-bit identifier of the ML-DSA-65 signature code 1AAQ
-// (provisional, see TSP Rev 3 "ML-DSA-65 Signature").
+// (provisional, see TSP 1.0 "ML-DSA-65 Signature").
 const CodeMLDSA65 uint32 = 16 // "AAQ"
 
 const (

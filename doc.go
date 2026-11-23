@@ -1,10 +1,11 @@
-// Package tsp implements the Trust Spanning Protocol (TSP), Rev 3
-// (YTSP-AAC, version 0.2), as specified by the Trust over IP Foundation.
+// Package tsp implements the Trust Spanning Protocol (TSP) 1.0 (YTSP-BAA), as
+// specified by the Trust over IP Foundation. Rev 3 (YTSP-AAC) and earlier
+// drafts are refused.
 //
 // A TSP message is an envelope (version, sender VID, receiver VID), a payload
 // that is either encrypted or carried in the clear, and a signature over both,
 // all framed in binary-domain CESR. This package encodes and decodes every
-// Rev 3 payload type:
+// TSP 1.0 payload type:
 //
 //   - SCS: upper-layer application data (XSCS)
 //   - CTL: generic control data for the layer above TSP (XCTL)

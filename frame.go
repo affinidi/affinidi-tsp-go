@@ -660,7 +660,7 @@ func parseMessage(msg []byte) (*parsedMessage, error) {
 	}
 	c.pos += n
 	if major != CurrentVersion.Major {
-		return nil, newErr(KindVersion, "unsupported TSP major version %d", major)
+		return nil, newErr(KindVersion, "unsupported TSP version %s (%s); this package speaks TSP 1.0", Version{major, minor}, describeVersion(major, minor))
 	}
 	sender, err := c.vid("sender VID")
 	if err != nil {
